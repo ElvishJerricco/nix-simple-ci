@@ -40,7 +40,8 @@ TODO
   them to a site like pastebin.
 - You can't use the statuses API to add a status to a commit on
   someone's fork of your repo, meaning you can't get CI status for PRs
-  from forks. It'd be great if there were a way to do this.
+  from forks. It'd be great if there were a way to do this. Maybe just
+  build PRs and leave something like a comment?
 - Document launching the server in a systemd unit using NixOS modules.
 - Support multiple Webhook tokens via the `servant-github-webhook`
   library, and support multiple access tokens.
