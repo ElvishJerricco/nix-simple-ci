@@ -1,35 +1,43 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
-
+{-# LANGUAGE TypeApplications  #-}
 module Main where
 
-import Control.Concurrent.Async
-import Control.Concurrent.QSem
-import Control.Exception
-import Control.Lens
-import Control.Monad.IO.Class
-import Data.Aeson
-import Data.Aeson.Lens
-import Data.Aeson.TH
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
-import Data.Char (toLower)
-import Data.Foldable (for_)
-import Data.List (stripPrefix)
-import Data.Maybe
-import Data.Text (Text)
-import qualified Data.Text as T
-import Network.HTTP.Client hiding (Proxy)
-import Network.HTTP.Client.TLS
-import Network.Wai.Handler.Warp
-import Servant
-import Servant.GitHub.Webhook
-import System.Environment
-import Turtle hiding (stripPrefix)
+import           Control.Concurrent.Async
+import           Control.Concurrent.QSem
+import           Control.Exception
+import           Control.Lens
+import           Control.Monad.IO.Class
+import           Data.Aeson
+import           Data.Aeson.Lens
+import           Data.Aeson.TH
+import           Data.ByteString          (ByteString)
+import           Data.Char                (toLower)
+import           Data.Foldable            (for_)
+import           Data.List                (stripPrefix)
+import           Data.Maybe
+import           Data.Text                (Text)
+import qualified Data.Text                as T
+import           Network.HTTP.Client      hiding (Proxy)
+import           Network.HTTP.Client.TLS
+import           Network.Wai.Handler.Warp
+import           Options.Generic
+import           Servant
+import           Servant.GitHub.Webhook
+import           Turtle                   hiding (stripPrefix)
+
+data Option = Option
+  { secret :: ByteString
+  , oauth  :: ByteString
+  , port   :: Maybe Int
+  } deriving (Show, Eq, Generic)
+
+instance ParseRecord Option
 
 data BuildCommit = BuildCommit
   { _buildCommit_repo :: Text
@@ -62,13 +70,14 @@ type API
 
 main :: IO ()
 main = do
-  [secret, oauth] <- getArgs
-  mgr             <- newTlsManager
-  sem             <- newQSem 1
-  putStrLn "Starting server on 8080"
-  run 8080 $ serveWithContext (Proxy @API)
-                              (gitHubKey (pure $ BS.pack secret) :. EmptyContext)
-                              (server mgr (BS.pack oauth) sem)
+  Option {..} <- getRecord "nix-simple-ci"
+  mgr         <- newTlsManager
+  sem         <- newQSem 1
+  let port'    = fromMaybe 8080 port
+  putStrLn $ "Starting server on " ++ show port'
+  run port' $ serveWithContext (Proxy @API)
+                              (gitHubKey (pure secret) :. EmptyContext)
+                              (server mgr oauth sem)
 
 server :: Manager -> ByteString -> QSem -> Server API
 server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
