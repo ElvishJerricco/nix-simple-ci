@@ -142,7 +142,7 @@ pushStatus mgr oauth commit state = do
         }
   _ <- httpNoBody
     req { method         = "POST"
-        , requestHeaders = [("Authentication", oauth)]
+        , requestHeaders = [("Authentication", oauth), ("User-Agent", "nix-simple-ci")]
         , requestBody    = RequestBodyLBS (encode status)
         }
     mgr
