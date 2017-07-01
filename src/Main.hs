@@ -117,6 +117,7 @@ build commit = do
     [ "--option"
     , "use-sandbox"
     , "true"
+    , "--no-out-link"
     , "-E"
     , format
       ( "let dl = (import <nixpkgs> {}).fetchzip { url = \""
