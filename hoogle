@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+PORT=$1
+if [ -z $PORT ]
+then
+  PORT=8080
+fi
+
+nix-shell -E 'with import ./nixpkgs {}; (callPackage ./. { haskellPackages = (haskellPackages.extend (self: super: { ghcWithPackages = self.ghcWithHoogle; })); }).env' \
+	  --run "hoogle serve --local -p $PORT"
