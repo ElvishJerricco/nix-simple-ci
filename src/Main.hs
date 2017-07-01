@@ -36,7 +36,6 @@ data BuildCommit = BuildCommit
   , _buildCommit_revision :: Text
   }
   deriving (Show, Read, Eq, Ord)
-makeLenses ''BuildCommit
 
 data CommitState
   = CommitState_Pending
@@ -53,7 +52,6 @@ data CommitStatus = CommitStatus
   , _commitStatus_context :: Maybe Text
   }
   deriving (Show, Read, Eq, Ord)
-makeLenses ''CommitStatus
 deriveJSON defaultOptions { fieldLabelModifier = fromJust . stripPrefix "_commitStatus_" } ''CommitStatus
 
 type API
