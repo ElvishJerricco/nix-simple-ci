@@ -74,8 +74,8 @@ server :: Manager -> ByteString -> QSem -> Server API
 server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
   putStrLn $ "got WebhookPushEvent object: " ++ show obj
   let builds = do
-        repo <- obj ^.. key "repository" . key "full_name" . _String
-        rev  <- obj ^.. key "commits" . values . key "id" . _String
+        repo <- obj ^? key "repository" . key "full_name" . _String
+        rev  <- obj ^? key "head_commit" . key "id" . _String
         return BuildCommit
           { _buildCommit_repo     = repo
           , _buildCommit_revision = rev
