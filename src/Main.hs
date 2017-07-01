@@ -82,6 +82,7 @@ server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
           { _buildCommit_repo     = repo
           , _buildCommit_revision = rev
           }
+  putStrLn $ "\n\nbuilding: " ++ show builds
   for_ builds $ \commit -> async $ do
     success <- try @SomeException $ bracket_ (waitQSem sem) (signalQSem sem) $ single $ do
       liftIO $ pushStatus mgr oauth commit CommitState_Pending
