@@ -125,7 +125,6 @@ build commit = do
     ExitSuccess   -> CommitState_Success
     ExitFailure _ -> CommitState_Failure
 
--- https://api.github.com/repos/octocat/Hello-World/statuses/6dcb09b5b57875f334f61aebed695e2e4193db5e
 pushStatus :: Manager -> ByteString -> BuildCommit -> CommitState -> IO ()
 pushStatus mgr oauth commit state = do
   req <-
@@ -141,9 +140,13 @@ pushStatus mgr oauth commit state = do
         , _commitStatus_context     = Just "continuous-integration/nix-simple-ci"
         }
   _ <- httpNoBody
-    req { method         = "POST"
-        , requestHeaders = [("Authentication", oauth), ("User-Agent", "nix-simple-ci")]
-        , requestBody    = RequestBodyLBS (encode status)
-        }
+    req
+      { method         = "POST"
+      , requestHeaders = [ ("Authorization", "token " <> oauth)
+                         , ("User-Agent"   , "nix-simple-ci")
+                         , ("Accept"       , "application/vnd.github.v3+json")
+                         ]
+      , requestBody = RequestBodyLBS (encode status)
+      }
     mgr
   return ()
