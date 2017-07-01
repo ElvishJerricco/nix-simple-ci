@@ -83,14 +83,16 @@ server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
           , _buildCommit_revision = rev
           }
   putStrLn $ "\n\nbuilding: " ++ show builds
-  for_ builds $ \commit -> async $ do
-    success <- try @SomeException $ bracket_ (waitQSem sem) (signalQSem sem) $ single $ do
-      liftIO $ pushStatus mgr oauth commit CommitState_Pending
-      code <- build commit
-      liftIO $ pushStatus mgr oauth commit code
-    case success of
-      Right (Just _) -> return ()
-      _              -> () <$ try @SomeException (pushStatus mgr oauth commit CommitState_Error)
+  for_ builds $ \commit ->
+    async $ handle @SomeException print $ flip onException (pushError commit) $ do
+      success <- bracket_ (waitQSem sem) (signalQSem sem) $ single $ do
+        liftIO $ pushStatus mgr oauth commit CommitState_Pending
+        code <- build commit
+        liftIO $ pushStatus mgr oauth commit code
+      case success of
+        Just _ -> return ()
+        _      -> pushError commit
+  where pushError commit = pushStatus mgr oauth commit CommitState_Error
 server _ _ _ event _ = liftIO $ putStrLn $ "This shouldn't happen: Unwanted event: " ++ show event
 
 build :: BuildCommit -> Shell CommitState
