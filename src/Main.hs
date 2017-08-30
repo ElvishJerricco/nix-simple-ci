@@ -23,6 +23,7 @@ import           Data.Char (toLower)
 import           Data.Foldable (for_)
 import           Data.List (stripPrefix)
 import           Data.Maybe
+import           Data.String.Conversions (cs)
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Network.HTTP.Client hiding (Proxy)
@@ -43,7 +44,8 @@ data Option = Option
 instance ParseRecord Option
 
 data BuildCommit = BuildCommit
-  { _buildCommit_repo :: Text
+  { _buildCommit_repoName :: Text
+  , _buildCommit_repoUrl :: Text
   , _buildCommit_revision :: Text
   }
   deriving (Show, Read, Eq, Ord)
@@ -88,11 +90,13 @@ server :: Manager -> ByteString -> QSem -> Server API
 server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
   putStrLn $ "got WebhookPushEvent object: " ++ show obj
   let builds = do
-        repo <- obj ^? key "repository" . key "git_url" . _String
-        rev  <- obj ^? key "head_commit" . key "id" . _String
+        _buildCommit_repoName <- obj ^? key "repository" . key "full_name" . _String
+        _buildCommit_repoUrl  <- obj ^? key "repository" . key "url" . _String
+        _buildCommit_revision <- obj ^? key "head_commit" . key "id" . _String
         return BuildCommit
-          { _buildCommit_repo     = repo
-          , _buildCommit_revision = rev
+          { _buildCommit_repoName
+          , _buildCommit_repoUrl
+          , _buildCommit_revision
           }
   putStrLn $ "\n\nbuilding: " ++ show builds
   for_ builds $ \commit ->
@@ -108,43 +112,46 @@ server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
 server _ _ _ event _ = liftIO $ putStrLn $ "This shouldn't happen: Unwanted event: " ++ show event
 
 build :: BuildCommit -> Shell CommitState
-build BuildCommit { _buildCommit_repo, _buildCommit_revision } = do
-  sha <- inproc "nix-prefetch-git"
-                ["--url", _buildCommit_repo, "--rev", _buildCommit_revision]
-                mzero
-  code <- proc
-    "nix-build"
-    [ "--option"
-    , "use-sandbox"
-    , "true"
-    , "--no-out-link"
-    , "-E"
-    , format
-      ( "let dl = (import <nixpkgs> {}).fetchgit { url = \""
-      % s
-      % "\"; sha256 = \""
-      % l
-      % "\"; rev = \""
-      % s
-      % "\"; }; in import \"${dl}/ci.nix\" {}"
-      )
-      _buildCommit_repo
-      sha
-      _buildCommit_revision
-    ]
+build BuildCommit { _buildCommit_repoUrl, _buildCommit_revision } = do
+  (_, mprefetch) <- liftIO $ procStrict
+    "nix-prefetch-git"
+    ["--url", _buildCommit_repoUrl, "--rev", _buildCommit_revision, "--fetch-submodules"]
     mzero
+  prefetch <- select $   decode @Value $ cs mprefetch
+  sha <- select $ prefetch ^? key "sha256" . _String
+  let args =
+        [ "--option"
+        , "use-sandbox"
+        , "true"
+        , "--no-out-link"
+        , "-E"
+        , format
+          ( "let dl = (import <nixpkgs> {}).fetchgit { fetchSubmodules = true; url = \""
+          % s
+          % "\"; sha256 = \""
+          % s
+          % "\"; rev = \""
+          % s
+          % "\"; }; in import \"${dl}/ci.nix\" {}"
+          )
+          _buildCommit_repoUrl
+          sha
+          _buildCommit_revision
+        ]
+  liftIO $ putStrLn $ T.unpack $ "Running: nix-build " <> T.unwords args
+  code <- proc "nix-build" args mzero
   return $ case code of
     ExitSuccess   -> CommitState_Success
     ExitFailure _ -> CommitState_Failure
 
 pushStatus :: Manager -> ByteString -> BuildCommit -> CommitState -> IO ()
-pushStatus mgr oauth commit state = do
+pushStatus mgr oauth BuildCommit { _buildCommit_repoName, _buildCommit_revision } state = do
   req <-
     parseUrlThrow
       $  "https://api.github.com/repos/"
-      <> T.unpack (_buildCommit_repo commit)
+      <> T.unpack _buildCommit_repoName
       <> "/statuses/"
-      <> T.unpack (_buildCommit_revision commit)
+      <> T.unpack _buildCommit_revision
   let status = CommitStatus
         { _commitStatus_state       = state
         , _commitStatus_target_url  = Nothing
