@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Main where
 
@@ -84,7 +85,7 @@ server :: Manager -> ByteString -> QSem -> Server API
 server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
   putStrLn $ "got WebhookPushEvent object: " ++ show obj
   let builds = do
-        repo <- obj ^? key "repository" . key "full_name" . _String
+        repo <- obj ^? key "repository" . key "git_url" . _String
         rev  <- obj ^? key "head_commit" . key "id" . _String
         return BuildCommit
           { _buildCommit_repo     = repo
@@ -104,14 +105,10 @@ server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
 server _ _ _ event _ = liftIO $ putStrLn $ "This shouldn't happen: Unwanted event: " ++ show event
 
 build :: BuildCommit -> Shell CommitState
-build commit = do
-  let url =
-        "https://github.com/"
-          <> _buildCommit_repo commit
-          <> "/archive/"
-          <> _buildCommit_revision commit
-          <> ".tar.gz"
-  sha  <- inproc "nix-prefetch-url" ["--unpack", url] mzero
+build BuildCommit { _buildCommit_repo, _buildCommit_revision } = do
+  sha <- inproc "nix-prefetch-git"
+                ["--url", _buildCommit_repo, "--rev", _buildCommit_revision]
+                mzero
   code <- proc
     "nix-build"
     [ "--option"
@@ -120,14 +117,17 @@ build commit = do
     , "--no-out-link"
     , "-E"
     , format
-      ( "let dl = (import <nixpkgs> {}).fetchzip { url = \""
+      ( "let dl = (import <nixpkgs> {}).fetchgit { url = \""
       % s
       % "\"; sha256 = \""
       % l
+      % "\"; rev = \""
+      % s
       % "\"; }; in import \"${dl}/ci.nix\" {}"
       )
-      url
+      _buildCommit_repo
       sha
+      _buildCommit_revision
     ]
     mzero
   return $ case code of
