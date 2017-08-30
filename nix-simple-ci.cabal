@@ -21,6 +21,7 @@ executable nix-simple-ci
                      , servant-server
                      , servant-github-webhook
                      , warp
+                     , wai-logger
                      , text
                      , turtle
                      , lens-aeson

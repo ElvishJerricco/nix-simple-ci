@@ -10,28 +10,29 @@
 
 module Main where
 
-import Control.Concurrent.Async
-import Control.Concurrent.QSem
-import Control.Exception
-import Control.Lens
-import Control.Monad.IO.Class
-import Data.Aeson
-import Data.Aeson.Lens
-import Data.Aeson.TH
-import Data.ByteString (ByteString)
-import Data.Char (toLower)
-import Data.Foldable (for_)
-import Data.List (stripPrefix)
-import Data.Maybe
-import Data.Text (Text)
+import           Control.Concurrent.Async
+import           Control.Concurrent.QSem
+import           Control.Exception
+import           Control.Lens
+import           Control.Monad.IO.Class
+import           Data.Aeson
+import           Data.Aeson.Lens
+import           Data.Aeson.TH
+import           Data.ByteString (ByteString)
+import           Data.Char (toLower)
+import           Data.Foldable (for_)
+import           Data.List (stripPrefix)
+import           Data.Maybe
+import           Data.Text (Text)
 import qualified Data.Text as T
-import Network.HTTP.Client hiding (Proxy)
-import Network.HTTP.Client.TLS
-import Network.Wai.Handler.Warp
-import Options.Generic
-import Servant
-import Servant.GitHub.Webhook
-import Turtle hiding (stripPrefix)
+import           Network.HTTP.Client hiding (Proxy)
+import           Network.HTTP.Client.TLS
+import           Network.Wai.Handler.Warp
+import           Network.Wai.Logger
+import           Options.Generic
+import           Servant
+import           Servant.GitHub.Webhook
+import           Turtle hiding (stripPrefix)
 
 data Option = Option
   { secret :: ByteString
@@ -77,9 +78,11 @@ main = do
   sem         <- newQSem 1
   let port' = fromMaybe 8080 port
   putStrLn $ "Starting server on " ++ show port'
-  run port' $ serveWithContext (Proxy @API)
-                               (gitHubKey (pure secret) :. EmptyContext)
-                               (server mgr oauth sem)
+  withStdoutLogger $ \logger -> do
+    let settings = setPort port' $ setLogger logger defaultSettings
+    runSettings settings $ serveWithContext (Proxy @API)
+                                            (gitHubKey (pure secret) :. EmptyContext)
+                                            (server mgr oauth sem)
 
 server :: Manager -> ByteString -> QSem -> Server API
 server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
